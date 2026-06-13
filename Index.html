@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Butacas</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 5px; color: #e50914; }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .box { width: 18px; height: 18px; border-radius: 4px; }
+        .available-box { background-color: #4caf50; }
+        .occupied-box { background-color: #f44336; }
+        
+        .tribuna-title {
+            background-color: #222;
+            padding: 5px;
+            margin: 15px 0 5px 0;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 6px;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 10px;
+            background: #1e1e1e;
+            border-radius: 8px;
+        }
+        .seat {
+            aspect-ratio: 1;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            touch-action: manipulation;
+        }
+        .seat.occupied { background-color: #f44336; }
+        
+        .btn-reset {
+            margin-top: 25px;
+            padding: 12px 25px;
+            background-color: #e50914;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 90%;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎬 CONTROL DE BUTACAS</h1>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="box available-box"></div> Libre</div>
+        <div class="legend-item"><div class="box occupied-box"></div> Ocupado</div>
+    </div>
+
+    <div>
+        <div class="tribuna-title">TRIBUNA A</div>
+        <div id="tribunaA" class="grid"></div>
+
+        <div class="tribuna-title">TRIBUNA B</div>
+        <div id="tribunaB" class="grid"></div>
+    </div>
+
+    <button class="btn-reset" onclick="resetearTodo()">Reiniciar Todo el Mapa</button>
+
+    <script>
+        const STORAGE_KEY = 'control_butacas_web_data';
+        let estadoButacas = {};
+
+        function inicializarDatos() {
+            const datosGuardados = localStorage.getItem(STORAGE_KEY);
+            if (datosGuardados) {
+                estadoButacas = JSON.parse(datosGuardados);
+            } else {
+                for (let i = 1; i <= 50; i++) {
+                    estadoButacas[`A-${i}`] = null;
+                    estadoButacas[`B-${i}`] = null;
+                }
+                guardarEnMemoria();
+            }
+        }
+
+        function guardarEnMemoria() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(estadoButacas));
+        }
+
+        function renderizarMapas() {
+            dibujarTribuna('A', 'tribunaA');
+            dibujarTribuna('B', 'tribunaB');
+        }
+
+        function dibujarTribuna(letraTribuna, elementId) {
+            const contenedor = document.getElementById(elementId);
+            contenedor.innerHTML = ''; 
+
+            for (let i = 1; i <= 50; i++) {
+                const idAsiento = `${letraTribuna}-${i}`;
+                const nombreOcupante = estadoButacas[idAsiento];
+
+                const boton = document.createElement('button');
+                boton.classList.add('seat');
+                boton.innerText = i;
+                boton.setAttribute('id', idAsiento);
+
+                if (nombreOcupante) {
+                    boton.classList.add('occupied');
+                }
+
+                boton.onclick = () => gestionarAsiento(idAsiento);
+                contenedor.appendChild(boton);
+            }
+        }
+
+        function gestionarAsiento(id) {
+            const ocupanteActual = estadoButacas[id];
+
+            if (ocupanteActual) {
+                const confirmar = confirm(`Asiento ${id} ocupado por: ${ocupanteActual}\n\n¿Deseas liberar este asiento?`);
+                if (confirmar) {
+                    estadoButacas[id] = null;
+                    guardarEnMemoria();
+                    renderizarMapas();
+                }
+            } else {
+                const nombre = prompt(`Asiento ${id} disponible.\nIngresa el
+      
