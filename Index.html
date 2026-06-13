@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Butacas</title>
+    <title>Control de Butacas en Tiempo Real</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -59,11 +59,14 @@
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             touch-action: manipulation;
+            transition: transform 0.1s;
         }
+        .seat:active { transform: scale(0.9); }
         .seat.occupied { background-color: #f44336; }
         
         .btn-reset {
             margin-top: 25px;
+            margin-bottom: 30px;
             padding: 12px 25px;
             background-color: #e50914;
             color: white;
@@ -75,11 +78,19 @@
             width: 90%;
             max-width: 400px;
         }
+        .btn-reset:hover { background-color: #b20710; }
+        
+        #loading {
+            color: #ffeb3b;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
 
     <h1>🎬 CONTROL DE BUTACAS</h1>
+    <div id="loading">Conectando a la base de datos...</div>
     
     <div class="legend">
         <div class="legend-item"><div class="box available-box"></div> Libre</div>
@@ -96,28 +107,34 @@
 
     <button class="btn-reset" onclick="resetearTodo()">Reiniciar Todo el Mapa</button>
 
-    <script>
-        const STORAGE_KEY = 'control_butacas_web_data';
+    <!-- Importar Firebase como módulo -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // =======================================================
+        // ⚠️ PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE ⚠️
+        // =======================================================
+        const firebaseConfig = {
+            apiKey: "TU_API_KEY",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            databaseURL: "https://tu-proyecto-default-rtdb.firebaseio.com",
+            projectId: "tu-proyecto",
+            storageBucket: "tu-proyecto.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef12345"
+        };
+        // =======================================================
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dbRef = ref(db, 'butacas'); // La "carpeta" en la nube donde se guardará todo
+
         let estadoButacas = {};
 
-        function inicializarDatos() {
-            const datosGuardados = localStorage.getItem(STORAGE_KEY);
-            if (datosGuardados) {
-                estadoButacas = JSON.parse(datosGuardados);
-            } else {
-                for (let i = 1; i <= 50; i++) {
-                    estadoButacas[`A-${i}`] = null;
-                    estadoButacas[`B-${i}`] = null;
-                }
-                guardarEnMemoria();
-            }
-        }
-
-        function guardarEnMemoria() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(estadoButacas));
-        }
-
-        function renderizarMapas() {
+        // 1. Dibujar los 50 asientos de cada tribuna (Inicialización visual)
+        function crearEstructura() {
             dibujarTribuna('A', 'tribunaA');
             dibujarTribuna('B', 'tribunaB');
         }
@@ -128,32 +145,74 @@
 
             for (let i = 1; i <= 50; i++) {
                 const idAsiento = `${letraTribuna}-${i}`;
-                const nombreOcupante = estadoButacas[idAsiento];
-
                 const boton = document.createElement('button');
+                
                 boton.classList.add('seat');
                 boton.innerText = i;
                 boton.setAttribute('id', idAsiento);
-
-                if (nombreOcupante) {
-                    boton.classList.add('occupied');
-                }
-
-                boton.onclick = () => gestionarAsiento(idAsiento);
+                boton.onclick = () => window.gestionarAsiento(idAsiento);
+                
                 contenedor.appendChild(boton);
             }
         }
 
-        function gestionarAsiento(id) {
+        // 2. Escuchar la base de datos en línea EN TIEMPO REAL
+        onValue(dbRef, (snapshot) => {
+            document.getElementById('loading').style.display = 'none'; // Ocultar mensaje de carga
+            estadoButacas = snapshot.val() || {}; // Obtener datos de la nube
+            actualizarColores();
+        });
+
+        // 3. Actualizar los colores y nombres según la nube
+        function actualizarColores() {
+            const asientos = document.querySelectorAll('.seat');
+            asientos.forEach(boton => {
+                const id = boton.id;
+                const nombreOcupante = estadoButacas[id];
+
+                if (nombreOcupante) {
+                    boton.classList.add('occupied');
+                    boton.title = `Ocupado por: ${nombreOcupante}`; // Muestra el nombre al poner el mouse encima
+                } else {
+                    boton.classList.remove('occupied');
+                    boton.title = `Libre`;
+                }
+            });
+        }
+
+        // 4. Lógica de hacer clic en un asiento
+        window.gestionarAsiento = function(id) {
             const ocupanteActual = estadoButacas[id];
 
             if (ocupanteActual) {
-                const confirmar = confirm(`Asiento ${id} ocupado por: ${ocupanteActual}\n\n¿Deseas liberar este asiento?`);
+                // Si está ocupado, preguntar si se quiere liberar
+                const confirmar = confirm(`El asiento ${id} está ocupado por: ${ocupanteActual}\n\n¿Deseas liberar este asiento?`);
                 if (confirmar) {
-                    estadoButacas[id] = null;
-                    guardarEnMemoria();
-                    renderizarMapas();
+                    // Borrar de la nube
+                    set(ref(db, `butacas/${id}`), null);
                 }
             } else {
-                const nombre = prompt(`Asiento ${id} disponible.\nIngresa el
-      
+                // Si está libre, pedir nombre
+                const nombre = prompt(`El asiento ${id} está DISPONIBLE.\n\nIngresa el nombre del espectador:`);
+                if (nombre && nombre.trim() !== "") {
+                    // Guardar en la nube
+                    set(ref(db, `butacas/${id}`), nombre.trim());
+                }
+            }
+        };
+
+        // 5. Botón de reiniciar todo
+        window.resetearTodo = function() {
+            const contraseña = prompt("ATENCIÓN: Se van a borrar todos los asientos.\nEscribe 'CONFIRMAR' para proceder:");
+            if (contraseña === 'CONFIRMAR') {
+                set(dbRef, null); // Borra todo en la nube
+                alert("Mapa reiniciado con éxito.");
+            }
+        };
+
+        // Iniciar la creación de botones al cargar la página
+        crearEstructura();
+
+    </script>
+</body>
+</html>
