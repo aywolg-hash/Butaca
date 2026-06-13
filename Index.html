@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -39,9 +39,9 @@
         }
         .grid {
             display: grid;
-            grid-template-columns: repeat(10, 1fr);
+            grid-template-columns: repeat(18, 1fr); /* Modificado a 18 por línea */
             gap: 6px;
-            max-width: 400px;
+            max-width: 800px; /* Ampliado para que quepan bien las 18 butacas */
             margin: 0 auto;
             padding: 10px;
             background: #1e1e1e;
@@ -141,7 +141,7 @@
             const contenedor = document.getElementById(elementId);
             contenedor.innerHTML = ''; 
 
-            for (let i = 1; i <= 50; i++) {
+            for (let i = 1; i <= 54; i++) { // Modificado a 54 butacas
                 const idAsiento = `${letraTribuna}-${i}`;
                 const boton = document.createElement('button');
                 boton.classList.add('seat');
@@ -198,9 +198,9 @@
         function descargarExcel() {
             const filasExcel = [];
 
-            // Recorrer los 100 asientos en orden para armar el Excel
+            // Recorrer los asientos en orden para armar el Excel
             ['A', 'B'].forEach(tribuna => {
-                for (let i = 1; i <= 50; i++) {
+                for (let i = 1; i <= 54; i++) { // Modificado a 54 butacas
                     const id = `${tribuna}-${i}`;
                     const datos = estadoButacas[id];
 
