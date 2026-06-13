@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Butacas en Tiempo Real</title>
+    <title>Control de Butacas a Excel</title>
+    <!-- Librería gratuita para generar el Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -13,7 +15,7 @@
             margin: 0;
             padding: 10px;
         }
-        h1 { font-size: 1.5rem; margin-bottom: 5px; color: #e50914; }
+        h1 { font-size: 1.6rem; margin-bottom: 5px; color: #4caf50; }
         .legend {
             display: flex;
             justify-content: center;
@@ -58,17 +60,21 @@
             justify-content: center;
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            touch-action: manipulation;
             transition: transform 0.1s;
         }
         .seat:active { transform: scale(0.9); }
         .seat.occupied { background-color: #f44336; }
         
-        .btn-reset {
+        .btn-container {
             margin-top: 25px;
             margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        button.action-btn {
             padding: 12px 25px;
-            background-color: #e50914;
             color: white;
             border: none;
             border-radius: 5px;
@@ -78,19 +84,15 @@
             width: 90%;
             max-width: 400px;
         }
+        .btn-excel { background-color: #217346; } /* Color oficial de Excel */
+        .btn-excel:hover { background-color: #1a5c38; }
+        .btn-reset { background-color: #e50914; }
         .btn-reset:hover { background-color: #b20710; }
-        
-        #loading {
-            color: #ffeb3b;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
 
-    <h1>🎬 CONTROL DE BUTACAS</h1>
-    <div id="loading">Conectando a la base de datos...</div>
+    <h1>📋 REGISTRO DE BUTACAS</h1>
     
     <div class="legend">
         <div class="legend-item"><div class="box available-box"></div> Libre</div>
@@ -105,35 +107,31 @@
         <div id="tribunaB" class="grid"></div>
     </div>
 
-    <button class="btn-reset" onclick="resetearTodo()">Reiniciar Todo el Mapa</button>
+    <div class="btn-container">
+        <button class="action-btn btn-excel" onclick="descargarExcel()">📥 Descargar a Excel</button>
+        <button class="action-btn btn-reset" onclick="resetearTodo()">🗑️ Reiniciar Mapa</button>
+    </div>
 
-    <!-- Importar Firebase como módulo -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    <script>
+        const STORAGE_KEY = 'registro_butacas_excel';
+        let estadoButacas = {}; // Guardará { nombre: "...", cedula: "..." }
 
-        // =======================================================
-        // ⚠️ PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE ⚠️
-        // =======================================================
-        const firebaseConfig = {
-            apiKey: "TU_API_KEY",
-            authDomain: "tu-proyecto.firebaseapp.com",
-            databaseURL: "https://tu-proyecto-default-rtdb.firebaseio.com",
-            projectId: "tu-proyecto",
-            storageBucket: "tu-proyecto.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abcdef12345"
-        };
-        // =======================================================
+        // 1. Cargar datos desde la memoria del navegador
+        function inicializarDatos() {
+            const datosGuardados = localStorage.getItem(STORAGE_KEY);
+            if (datosGuardados) {
+                estadoButacas = JSON.parse(datosGuardados);
+            }
+            crearEstructura();
+            actualizarColores();
+        }
 
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const dbRef = ref(db, 'butacas'); // La "carpeta" en la nube donde se guardará todo
+        function guardarDatos() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(estadoButacas));
+            actualizarColores();
+        }
 
-        let estadoButacas = {};
-
-        // 1. Dibujar los 50 asientos de cada tribuna (Inicialización visual)
+        // 2. Dibujar los asientos
         function crearEstructura() {
             dibujarTribuna('A', 'tribunaA');
             dibujarTribuna('B', 'tribunaB');
@@ -146,72 +144,95 @@
             for (let i = 1; i <= 50; i++) {
                 const idAsiento = `${letraTribuna}-${i}`;
                 const boton = document.createElement('button');
-                
                 boton.classList.add('seat');
                 boton.innerText = i;
                 boton.setAttribute('id', idAsiento);
-                boton.onclick = () => window.gestionarAsiento(idAsiento);
-                
+                boton.onclick = () => gestionarAsiento(idAsiento);
                 contenedor.appendChild(boton);
             }
         }
 
-        // 2. Escuchar la base de datos en línea EN TIEMPO REAL
-        onValue(dbRef, (snapshot) => {
-            document.getElementById('loading').style.display = 'none'; // Ocultar mensaje de carga
-            estadoButacas = snapshot.val() || {}; // Obtener datos de la nube
-            actualizarColores();
-        });
-
-        // 3. Actualizar los colores y nombres según la nube
+        // 3. Pintar los asientos según su estado
         function actualizarColores() {
-            const asientos = document.querySelectorAll('.seat');
-            asientos.forEach(boton => {
+            document.querySelectorAll('.seat').forEach(boton => {
                 const id = boton.id;
-                const nombreOcupante = estadoButacas[id];
+                const datosAsiento = estadoButacas[id];
 
-                if (nombreOcupante) {
+                if (datosAsiento) {
                     boton.classList.add('occupied');
-                    boton.title = `Ocupado por: ${nombreOcupante}`; // Muestra el nombre al poner el mouse encima
+                    boton.title = `${datosAsiento.nombre} - C.I: ${datosAsiento.cedula}`;
                 } else {
                     boton.classList.remove('occupied');
-                    boton.title = `Libre`;
+                    boton.title = 'Libre';
                 }
             });
         }
 
-        // 4. Lógica de hacer clic en un asiento
-        window.gestionarAsiento = function(id) {
-            const ocupanteActual = estadoButacas[id];
+        // 4. Lógica de registro por asiento
+        function gestionarAsiento(id) {
+            const datosActuales = estadoButacas[id];
 
-            if (ocupanteActual) {
-                // Si está ocupado, preguntar si se quiere liberar
-                const confirmar = confirm(`El asiento ${id} está ocupado por: ${ocupanteActual}\n\n¿Deseas liberar este asiento?`);
+            if (datosActuales) {
+                const confirmar = confirm(`Asiento ${id}\nOcupado por: ${datosActuales.nombre}\nCédula: ${datosActuales.cedula}\n\n¿Deseas vaciar este asiento?`);
                 if (confirmar) {
-                    // Borrar de la nube
-                    set(ref(db, `butacas/${id}`), null);
+                    delete estadoButacas[id];
+                    guardarDatos();
                 }
             } else {
-                // Si está libre, pedir nombre
-                const nombre = prompt(`El asiento ${id} está DISPONIBLE.\n\nIngresa el nombre del espectador:`);
-                if (nombre && nombre.trim() !== "") {
-                    // Guardar en la nube
-                    set(ref(db, `butacas/${id}`), nombre.trim());
-                }
-            }
-        };
+                const nombre = prompt(`Asiento ${id} - DISPONIBLE\n\n1. Ingresa el Nombre y Apellido:`);
+                if (!nombre || nombre.trim() === "") return; // Si cancela, no hace nada
 
-        // 5. Botón de reiniciar todo
-        window.resetearTodo = function() {
-            const contraseña = prompt("ATENCIÓN: Se van a borrar todos los asientos.\nEscribe 'CONFIRMAR' para proceder:");
-            if (contraseña === 'CONFIRMAR') {
-                set(dbRef, null); // Borra todo en la nube
+                const cedula = prompt(`2. Ingresa la Cédula de ${nombre.trim()}:`);
+                if (!cedula || cedula.trim() === "") return; // Si cancela, no hace nada
+
+                // Guardar nombre y cédula en el asiento
+                estadoButacas[id] = {
+                    nombre: nombre.trim(),
+                    cedula: cedula.trim()
+                };
+                guardarDatos();
+            }
+        }
+
+        // 5. GENERAR Y DESCARGAR EL EXCEL
+        function descargarExcel() {
+            const filasExcel = [];
+
+            // Recorrer los 100 asientos en orden para armar el Excel
+            ['A', 'B'].forEach(tribuna => {
+                for (let i = 1; i <= 50; i++) {
+                    const id = `${tribuna}-${i}`;
+                    const datos = estadoButacas[id];
+
+                    // Formato exacto de las columnas que pediste
+                    filasExcel.push({
+                        "Asiento": id,
+                        "Nombre y Apellido": datos ? datos.nombre : "",
+                        "Cédula": datos ? datos.cedula : ""
+                    });
+                }
+            });
+
+            // Usar la librería SheetJS para crear el archivo
+            const hoja = XLSX.utils.json_to_sheet(filasExcel);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "Registro de Butacas");
+
+            // Descargar archivo
+            XLSX.writeFile(libro, "Control_De_Butacas.xlsx");
+        }
+
+        // 6. Botón para borrar todo
+        function resetearTodo() {
+            if (confirm("ATENCIÓN: Se vaciarán todos los asientos.\n¿Estás seguro?")) {
+                estadoButacas = {};
+                guardarDatos();
                 alert("Mapa reiniciado con éxito.");
             }
-        };
+        }
 
-        // Iniciar la creación de botones al cargar la página
-        crearEstructura();
+        // Iniciar la app
+        inicializarDatos();
 
     </script>
 </body>
